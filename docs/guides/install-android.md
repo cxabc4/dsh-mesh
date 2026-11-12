@@ -18,17 +18,26 @@ DSH Go 的插件安装有两条路：
 1. **插件市场**（设置 → 插件 → 插件市场）：适合发布到 npm 或已在市场索引里的包。DSH Go 的能力是「先卸再装」，没有 in-place 升级。
 2. **`dsh plugin` 命令**（rootfs 内）：等价桌面版的安装方式，底层转发给 rootfs 自带的 pnpm（11.28.5）。
 
-v0.1 的 dsh-mesh 是本地源码包，所以走第 2 条最省事：把整个 `dsh-mesh` 目录拷到手机可见的目录（例如 `/storage/emulated/0/Download/dsh-mesh` 或 rootfs 内路径），然后在 rootfs 的终端里：
+dsh-mesh 发布在公开仓库，所以从 git 地址装最省事——**不需要在手机上构建**，`lib/` 已经随仓库提交：
 
 ```bash
 # 在 DSH Go 的终端 / rootfs shell 中
-cd /opt/dsh        # DSH Go 的 DSH 安装位置
-node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add /path/to/dsh-mesh
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
 ```
+
+`package.json` 里没有 `prepare` / `prepack` / `postinstall`，所以 pnpm 拉到仓库后不会尝试跑任何构建脚本——手机端没有 TypeScript 也能装。
+
+如果 rootfs 里没有 `dsh` 命令，改用自带 pnpm 直连：
+
+```bash
+node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.com/cxabc4/dsh-mesh.git"
+```
+
+也可以先把仓库 clone 到手机本地目录再装本地路径（`add /path/to/dsh-mesh`），两者等价；git 形式的好处是以后重装能直接拿到仓库里的新版本。
 
 然后确认 profile 的 `package.json` 的 `dsh.profile.bundles` 里有 `dsh-mesh`。
 
-> 版本提示：手机是 `0.2.2-rc.1`。dsh-mesh 的依赖面已按该版本核对过（见 [install-desktop.md 的版本兼容](install-desktop.md#版本兼容)）。npm 上 `@deepseek-ai/*` 包的 `dist-tags.latest` 是错的（指向 `0.0.1-rc.1`），**如果将来要依赖它们，必须写死精确版本**；当前插件不依赖。
+> 版本提示：手机是 `0.2.2-rc.1`。dsh-mesh 的依赖面已按该版本核对过（见 [install-desktop.md 的版本兼容](install-desktop.md#版本兼容)）。npm 上 `@deepseek-ai/*` 包的 `dist-tags.latest` 是错的（指向 `0.0.1-rc.1`），**如果将来要依赖它们，必须写死精确版本**；当前插件不依赖任何 `@deepseek-ai/*` 包。
 
 ## 2. 配置
 

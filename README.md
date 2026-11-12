@@ -53,19 +53,33 @@ DeepSeek Harness 的跨设备网格插件。两台设备装**同一个包**，�
 
 ### 1. 安装插件
 
-```powershell
-# 在插件源码目录构建（Node 22.18+ 自带 TypeScript 类型剥离，无需 tsc）
-cd <你把仓库 clone 到的目录>
-node scripts/build.mjs
+两端装的是同一份代码，从同一个公开仓库安装：
 
-# 装进当前 profile（dsh-mesh 用 link:，改源码后重跑 build 即生效）
-dsh plugin --profile desktop add "<你把仓库 clone 到的目录>"
+```powershell
+# 桌面端：从仓库直接装（lib/ 已随仓库提交，不需要构建）
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
 ```
 
-也可以用 DSH 桌面端的「设置 → 插件 → 安装本地包」指向同一路径。安装会把它加进 profile 的 `dsh.profile.bundles`，**不会**改动你 profile 的 `cordis.patch.yml`。
+```bash
+# 手机端（DSH Go 的 rootfs 内），同一条命令
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
+```
+
+安装会把它加进 profile 的 `dsh.profile.bundles`，**不会**改动你 profile 的 `cordis.patch.yml`。
+
+**想改代码再装**（需要 Node ≥ 22.18，自带 TypeScript 类型剥离，无需 tsc）：
+
+```powershell
+git clone https://github.com/cxabc4/dsh-mesh.git
+cd dsh-mesh
+node scripts/build.mjs                          # src/*.ts -> lib/*.js
+dsh plugin --profile desktop add "<克隆目录>"    # link: 安装，改完重跑 build 即生效
+```
+
+也可以用 DSH 桌面端的「设置 → 插件 → 安装本地包」指向同一路径。
 
 > 若 `dsh` 不在 PATH：DSH 桌面自带 `.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs`，命令形如
-> `node <pnpm.mjs> --dir <profile目录> add "<你把仓库 clone 到的目录>"`，随后手工把 `dsh-mesh` 加进 profile `package.json` 的 `dsh.profile.bundles`。
+> `node <pnpm.mjs> --dir <profile目录> add "git+https://github.com/cxabc4/dsh-mesh.git"`，随后手工把 `dsh-mesh` 加进 profile `package.json` 的 `dsh.profile.bundles`。
 
 ### 2. 授权目录与配置
 
