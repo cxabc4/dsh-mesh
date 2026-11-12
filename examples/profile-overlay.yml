@@ -1,0 +1,20 @@
+# Example: add dsh-mesh to an existing DSH profile without touching the profile's patch.
+#
+# This is the overlay form used to verify composition:
+#   dsh --profile desktop --patch <this file> --dump-config
+#
+# It inserts the plugin row with the listener disabled, which is enough to prove that the
+# package manifest, the bundle patch, and the config shape compose. Turn the listener on
+# (and fill in peers/permissions) once the plugin is installed in the profile.
+- insert:
+    - id: dsh-mesh
+      name: dsh-mesh
+      config:
+        device:
+          name: "PC"
+        server:
+          enabled: false
+        peers: []
+        permissions:
+          allowedRoots: []
+          allowDelegate: true

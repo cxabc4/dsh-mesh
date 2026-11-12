@@ -1,0 +1,1 @@
+{ "zh": { "name": "设备网格", "description": "跨设备的 DSH 工作空间共享与原生子代理协作：两端装同一个插件，经一条全双工加密连接互调工具、互相委托任务。" }, "en": { "name": "Device Mesh", "description": "Share workspaces and delegate to native DSH agents across devices: one plugin on both sides, one authenticated full-duplex connection." } }

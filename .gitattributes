@@ -1,0 +1,19 @@
+# Force LF so a Windows clone does not rewrite every file.
+#
+# Git's `core.autocrlf` on this machine converts text files to CRLF on checkout. That
+# would (a) make every published file differ from what the build intended byte for
+# byte and (b) put CRLF into `.js` files that are read on Linux/Android. Normalising
+# here keeps the repository's content identical across all three platforms.
+* text=auto eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+
+# Binary or generated files that must stay untouched.
+*.png binary
+*.ico binary
+*.woff2 binary

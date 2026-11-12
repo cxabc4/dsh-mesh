@@ -1,0 +1,64 @@
+# Bundle patch for dsh-mesh.
+#
+# A DSH profile composes its plugin tree from patch layers: this file is one of them, and
+# it inserts the plugin row. Editing config here (not in the profile's own patch) keeps a
+# reinstall from silently discarding an operator's settings, because the profile layer is
+# applied after every bundle layer and only overrides rows it names explicitly.
+#
+# Everything that depends on the deployment — allowed roots and the peer list — starts
+# empty on purpose. The plugin loads and listens with those empty; it simply grants no
+# remote file access and has no peer to talk to, which is the safe state.
+
+- insert:
+    - id: dsh-mesh
+      name: dsh-mesh
+      config:
+        device:
+          # Leave empty to use the OS hostname. The durable device id is derived from an
+          # Ed25519 key generated on first start — never from this name, never from an IP.
+          name: ""
+        server:
+          enabled: true
+          # Loopback only: the operator's Frp tunnel republishes this port. Binding a wider
+          # interface would put the listener on every network the machine can reach.
+          host: 127.0.0.1
+          port: 8765
+          tls:
+            # Set enabled: true and point at a certificate when the tunnel carries real
+            # traffic. With false the application layer still encrypts every frame; TLS in
+            # addition hides the handshake from the tunnel operator.
+            enabled: false
+            certPath: ""
+            keyPath: ""
+            # SHA-256 of the server certificate, lowercase hex without separators. The
+            # dialing device pins it. Required for any wss:// peer.
+            fingerprintSha256: ""
+        peers: []
+        #   - alias: phone
+        #     url: wss://your-tunnel-host:your-public-port/dsh-mesh
+        #     autoConnect: true
+        permissions:
+          # Absolute directories a paired peer may touch on THIS device. Empty means no
+          # remote file access. Add only the directories you actually want to share.
+          allowedRoots: []
+          allowWrite: true
+          allowExec: true
+          allowDelegate: true
+          maxTaskMs: 1800000
+          maxConcurrentTasks: 3
+          exec:
+            # Empty allowCommands means "any program the deny list and the shell/script ban
+            # do not exclude". Set it to narrow execution to specific tools.
+            allowCommands: []
+            denyPatterns: []
+            defaultTimeoutMs: 120000
+            maxTimeoutMs: 1800000
+            maxOutputBytes: 262144
+        # Depth budget for cross-device delegation. 1 means a delegated task may not
+        # delegate onward, which is what stops PC to phone to PC loops.
+        maxDelegationDepth: 1
+        heartbeatIntervalMs: 20000
+        requestTimeoutMs: 30000
+        audit:
+          enabled: true
+          maxEntries: 5000

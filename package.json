@@ -1,0 +1,41 @@
+{
+  "name": "dsh-mesh",
+  "version": "0.1.0",
+  "description": "Share workspaces and delegate to native DSH agents across devices over one authenticated full-duplex connection.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "mesh",
+    "peer",
+    "subagent"
+  ],
+  "license": "MIT"
+}

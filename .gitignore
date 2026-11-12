@@ -1,0 +1,30 @@
+# Build output and state that must never be committed.
+# `lib/` is deliberately NOT ignored: it is the shipped package. A device that installs
+# this repository as a dependency cannot run a TypeScript build step, so the compiled
+# JavaScript has to be in the repository.
+node_modules/
+.pnpm-store/
+
+# Local runtime state written by the plugin into $DSH_HOME (never inside the repo, but a
+# stray copy here would contain a private key or a pairing secret).
+identity.json
+pairings.json
+tasks.jsonl
+audit.jsonl
+transfers/
+dsh-mesh/
+
+# Research notes gathered from a specific machine: absolute paths, provider names,
+# credentials-variable names, device ids. Kept local on purpose.
+docs/research/
+.probe/
+
+# Logs, scratch files, editor and OS noise.
+*.log
+*.tmp
+*.part
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
