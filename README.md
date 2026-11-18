@@ -57,15 +57,17 @@ DeepSeek Harness 的跨设备网格插件。两台设备装**同一个包**，�
 
 ```powershell
 # 桌面端：从仓库直接装（lib/ 已随仓库提交，不需要构建）
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.0"
 ```
 
 ```bash
 # 手机端（DSH Go 的 rootfs 内），同一条命令
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.0"
 ```
 
 安装会把它加进 profile 的 `dsh.profile.bundles`，**不会**改动你 profile 的 `cordis.patch.yml`。
+
+> 地址末尾的 `#v0.1.0` 是**版本钉子**，建议保留。去掉它就变成跟踪 `main` 的最新提交——每次重装都会拿到仓库里最新的、可能还没验证过的改动。要升级时把 `v0.1.0` 换成新 tag 再装一次即可。
 
 **想改代码再装**（需要 Node ≥ 22.18，自带 TypeScript 类型剥离，无需 tsc）：
 
@@ -79,7 +81,7 @@ dsh plugin --profile desktop add "<克隆目录>"    # link: 安装，改完重�
 也可以用 DSH 桌面端的「设置 → 插件 → 安装本地包」指向同一路径。
 
 > 若 `dsh` 不在 PATH：DSH 桌面自带 `.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs`，命令形如
-> `node <pnpm.mjs> --dir <profile目录> add "git+https://github.com/cxabc4/dsh-mesh.git"`，随后手工把 `dsh-mesh` 加进 profile `package.json` 的 `dsh.profile.bundles`。
+> `node <pnpm.mjs> --dir <profile目录> add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.0"`，随后手工把 `dsh-mesh` 加进 profile `package.json` 的 `dsh.profile.bundles`。
 
 ### 2. 授权目录与配置
 

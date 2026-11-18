@@ -22,15 +22,17 @@ dsh-mesh 发布在公开仓库，所以从 git 地址装最省事——**不需�
 
 ```bash
 # 在 DSH Go 的终端 / rootfs shell 中
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.0"
 ```
+
+地址末尾的 `#v0.1.0` 是版本钉子：手机固定在已发布的这一版，仓库 `main` 后续前进不会让重装悄悄换版本。要升级就把 tag 换成新的再装一次。
 
 `package.json` 里没有 `prepare` / `prepack` / `postinstall`，所以 pnpm 拉到仓库后不会尝试跑任何构建脚本——手机端没有 TypeScript 也能装。
 
 如果 rootfs 里没有 `dsh` 命令，改用自带 pnpm 直连：
 
 ```bash
-node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.com/cxabc4/dsh-mesh.git"
+node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.0"
 ```
 
 也可以先把仓库 clone 到手机本地目录再装本地路径（`add /path/to/dsh-mesh`），两者等价；git 形式的好处是以后重装能直接拿到仓库里的新版本。
