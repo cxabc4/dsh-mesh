@@ -56,7 +56,10 @@ node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.
       port: 8765
       tls:
         enabled: false
-        fingerprintSha256: ""   # 连 wss:// 的 PC 时，这里必须填 PC 证书指纹
+        # 只有 PC 用自签证书时才需要填指纹。走樱花这类自己终止 TLS 的隧道时，
+        # 证书是隧道商的公信证书，没有可固定的指纹 —— 改设 certificatePolicy 见下。
+        fingerprintSha256: ""
+        certificatePolicy: require
     peers:
       - alias: pc
         url: wss://你的樱花隧道域名:端口/dsh-mesh
@@ -69,6 +72,31 @@ node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.
       allowExec: true
       allowDelegate: true
 ```
+
+### 隧道自己终止 TLS 时怎么办
+
+有些隧道商（樱花就是）在前置节点做 TLS 终止，然后把明文转给本机。这种隧道上：
+
+- **不能**用 `ws://`：节点按 HTTP 解析，WebSocket 升级请求会被它回 `501 Not Implemented`。
+- **必须**用 `wss://`：TLS 在节点终止，隧道里的明文原样到达插件，握手正常。
+- 证书是隧道商域名的公信证书（例如 `*.your-tunnel-domain`），链到公共 CA，**你无法固定它的指纹**（密钥不在你手里）。
+
+所以这种情况把 `server.tls.fingerprintSha256` 留空，并设：
+
+```yaml
+    server:
+      tls:
+        certificatePolicy: system    # 用系统信任库校验，而不是指纹固定
+```
+
+`certificatePolicy` 两个取值：
+
+| 值 | 含义 | 什么时候用 |
+|---|---|---|
+| `require`（默认） | 没有指纹就拒绝连接 | 裸 TCP 隧道 + 自签证书 |
+| `system` | 用系统信任库验证证书 | 隧道商自己终止 TLS、发公信证书 |
+
+两种都**始终验证证书**，区别只是"谁来背书"。
 
 手机端的 `allowedRoots` 取决于 rootfs 里真实可见的路径。不要照抄 PC 的 Windows 路径——路径由目标设备自己解析，插件从不翻译。
 
