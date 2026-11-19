@@ -29,6 +29,7 @@ import { createTools, DELEGATION_TOOL_NAMES } from "./tools/mesh-tools.ts";
 import { TaskLedger } from "./sessions/tasks.ts";
 import { RemoteTaskRunner } from "./delegation/runner.ts";
 import { MESH_PROVIDER_NAME, MeshSubagentProvider, composePrompt } from "./delegation/provider.ts";
+import { registerSettingsRoute } from "./peer/settings-route.ts";
 import { sha256Hex } from "./security.ts";
 
 export const name = "dsh-mesh";
@@ -198,6 +199,16 @@ export async function apply(ctx: MeshContext, rawConfig: unknown = {}): Promise<
       "dsh-mesh: ctx.subagents is not mounted in this composition; mesh_delegate will report DELEGATION_UNAVAILABLE and the file/exec tools still work",
     );
   }
+
+  // The settings page in the browser needs live state and the pairing actions, and it
+  // reaches them through one Host route. A composition without `ctx.connection` (CLI-only)
+  // simply gets no page data; the listener and the tools above are unaffected.
+  const settingsRoute = registerSettingsRoute(ctx, {
+    manager,
+    log: (message) => logger.info(`dsh-mesh: ${message}`),
+  });
+  if (settingsRoute !== undefined) disposers.push(settingsRoute);
+  else logger.info("dsh-mesh: no ctx.connection.fetch in this composition; the settings page will report that it cannot read state");
 
   const prompt = ctx.get("systemPrompt") as
     | {

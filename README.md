@@ -85,6 +85,8 @@ dsh plugin --profile desktop add "<克隆目录>"    # link: 安装，改完重�
 
 ### 2. 授权目录与配置
 
+装好并重启 DSH 之后，**设置 → 远程连接**会出现一页由插件自己注册的界面：本机身份与监听状态、对端链路（含每条为什么连不上）、配对（生成/接受/删除配对串）、临时新增对端，以及对方设备该填的地址。这一页只读状态和做配对，**不改写你的配置文件**。
+
 配置写在插件的 `cordis.patch.yml` 里（随包分发），或在 profile 的 `cordis.patch.yml` 里用同 id 覆盖：
 
 ```yaml
@@ -97,6 +99,8 @@ dsh plugin --profile desktop add "<克隆目录>"    # link: 安装，改完重�
       enabled: true                    # 手机端也要开；它由本地 DSH 监听，只绑 127.0.0.1
       host: 127.0.0.1
       port: 8765
+      tls:
+        certificatePolicy: require     # 隧道商自己终止 TLS 时改成 system
     peers:
       - alias: phone                   # 手机端写 pc
         url: wss://你的隧道域名:端口/dsh-mesh
