@@ -127,6 +127,7 @@ dsh plugin --profile desktop add "<克隆目录>"    # link: 安装，改完重�
 
 樱花 FRP 的隧道配置、TLS 指纹生成、以及两端分别的完整步骤见：
 
+- [**手机安装与连接这台电脑**](docs/guides/phone-setup.md) — 从零到连通的完整操作单，含配对与排错
 - [Windows 安装](docs/guides/install-desktop.md)
 - [DSH Go / Android 安装](docs/guides/install-android.md)
 - [樱花 FRP 隧道](docs/guides/frp-tunnel.md)

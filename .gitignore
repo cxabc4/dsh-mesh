@@ -17,6 +17,9 @@ dsh-mesh/
 # Research notes gathered from a specific machine: absolute paths, provider names,
 # credentials-variable names, device ids. Kept local on purpose.
 docs/research/
+# Deployment-specific values for this one installation: the real device id, the real
+# tunnel host and port. The published guides carry placeholders instead.
+docs/local/
 .probe/
 
 # Logs, scratch files, editor and OS noise.

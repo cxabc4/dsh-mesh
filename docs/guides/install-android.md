@@ -25,7 +25,9 @@ dsh-mesh 发布在公开仓库，所以从 git 地址装最省事——**不需�
 dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
 ```
 
-地址末尾的 `#v0.1.0` 是版本钉子：手机固定在已发布的这一版，仓库 `main` 后续前进不会让重装悄悄换版本。要升级就把 tag 换成新的再装一次。
+地址末尾的 `#v0.1.1` 是版本钉子：手机固定在已发布的这一版，仓库 `main` 后续前进不会让重装悄悄换版本。要升级就把 tag 换成新的再装一次。
+
+> 一份从零到连通的完整操作单（含 PC 侧核对、配对、验证、排错）在 [phone-setup.md](phone-setup.md)。
 
 `package.json` 里没有 `prepare` / `prepack` / `postinstall`，所以 pnpm 拉到仓库后不会尝试跑任何构建脚本——手机端没有 TypeScript 也能装。
 
@@ -158,7 +160,8 @@ node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.
 | 现象 | 排查 |
 |---|---|
 | 插件加载了但工具没出现 | `inject: ["tools"]` 的服务不存在时 Cordis 会静默跳过 apply；检查是否在手机端 preset 里裁掉了 tools |
-| `wss://` 连不上，`lastError: CERT_UNPINNED` | 手机端没填 PC 证书指纹，或 PC 没开 TLS |
+| `wss://` 连不上，`lastError: CERT_UNPINNED` | 没设指纹且 `certificatePolicy` 还是默认的 `require`。若隧道商自己终止 TLS，改设 `certificatePolicy: system` |
+| `lastError: CERT_UNTRUSTED` | `certificatePolicy: system` 但证书没通过系统信任库校验。检查是否正确配置了系统 CA，或换 `require` + 指纹固定 |
 | 连上后很快掉线 | 隧道断或心跳失败；看 PC 日志与手机 `mesh_status` 的 `lastError` |
 | `mesh_delegate` 报 `DELEGATION_UNAVAILABLE` | 手机端 DSH 组合里没有 `ctx.subagents`（部分精简 preset 会裁掉） |
 | `mesh_delegate` 报 `NO_INITIATOR` | 从非 Agent 上下文（例如插件回调）调用了委托；必须从 Agent 回合里调 |
