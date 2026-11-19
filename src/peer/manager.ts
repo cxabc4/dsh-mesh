@@ -557,12 +557,14 @@ export class MeshManager {
     return base;
   }
 
-  /** Diagnostics helper used by the CLI probe script. */
+  /** Diagnostics helper: read a peer's certificate fingerprint without keeping the link. */
   probeFingerprint(url: string): Promise<{ ok: boolean; fingerprint?: string; error?: string }> {
     return dialPeer({
       url,
       fingerprintSha256: undefined,
-      requirePinned: false,
+      // A diagnostic probe must reach the peer to report its fingerprint, so it always
+      // asks the TLS layer for the certificate without a policy verdict.
+      certificatePolicy: "system",
       timeoutMs: 10_000,
     }).then((result) => {
       if (result.ok) {

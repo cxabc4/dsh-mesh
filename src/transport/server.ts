@@ -249,8 +249,19 @@ export interface DialOptions {
   url: string;
   /** Pinned SHA-256 of the server certificate, lowercase hex without separators. */
   fingerprintSha256: string | undefined;
-  /** Refuse to talk to a wss:// peer whose certificate is not pinned. */
-  requirePinned: boolean;
+  /**
+   * What to do when the peer is `wss://` and no fingerprint is configured.
+   *
+   *   "require"  — refuse (the old behaviour; right for a self-signed certificate on a
+   *                bare TCP tunnel, where nothing else can authenticate the server).
+   *   "system"   — accept a certificate the system trust store already validates. This is
+   *                the case when a tunneling provider terminates TLS itself: the
+   *                certificate belongs to the provider's domain and chains to a public CA,
+   *                so pinning a key the operator does not control is neither possible nor
+   *                the right check. The connection is still encrypted and the certificate
+   *                is still verified against the platform trust store.
+   */
+  certificatePolicy: "require" | "system";
   timeoutMs: number;
 }
 
@@ -290,7 +301,14 @@ export function dialPeer(options: DialOptions): Promise<DialResult> {
       resolve(result);
     };
     const socket = secure
-      ? tls.connect({ host, port, servername: host, rejectUnauthorized: false })
+      ? tls.connect({
+          host,
+          port,
+          servername: host,
+          // The platform trust store decides only in "system" mode; "require" verifies the
+          // pinned fingerprint by hand below, so a CA verdict would be irrelevant there.
+          rejectUnauthorized: options.certificatePolicy === "system",
+        })
       : net.connect({ host, port });
     const timer = setTimeout(() => {
       socket.destroy();
@@ -321,12 +339,25 @@ export function dialPeer(options: DialOptions): Promise<DialResult> {
             });
             return;
           }
-        } else if (options.requirePinned) {
+        } else if (options.certificatePolicy === "system") {
+          // The TLS layer already ran the platform verification (rejectUnauthorized: true);
+          // reaching here means the certificate chains to a trusted CA.
+          if ((socket as tls.TLSSocket).authorized !== true) {
+            socket.destroy();
+            finish({
+              ok: false,
+              code: "CERT_UNTRUSTED",
+              error: "the peer certificate is not trusted by the system store",
+            });
+            return;
+          }
+        } else {
           socket.destroy();
           finish({
             ok: false,
             code: "CERT_UNPINNED",
-            error: "this peer is wss:// but server.tls.fingerprintSha256 is not configured, so its certificate cannot be verified",
+            error:
+              "this peer is wss:// but server.tls.fingerprintSha256 is not configured; set a fingerprint, or set server.tls.certificatePolicy to \"system\" when a trusted CA issued the peer certificate",
           });
           return;
         }

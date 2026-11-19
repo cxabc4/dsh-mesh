@@ -10,6 +10,17 @@ export interface TlsConfig {
   keyPath: string | undefined;
   /** Pinned SHA-256 of the peer certificate, lowercase hex without separators. */
   fingerprintSha256: string | undefined;
+  /**
+   * How a `wss://` peer's certificate is authenticated when no fingerprint is set.
+   *
+   *   "require" (default) — refuse. Correct for a bare TCP tunnel, where a self-signed
+   *     certificate is the only option and pinning is the only thing that can authenticate
+   *     the far side.
+   *   "system" — verify against the platform trust store. Correct when the tunnel provider
+   *     terminates TLS itself: the certificate chains to a public CA and the operator does
+   *     not control its key, so there is no fingerprint to pin.
+   */
+  certificatePolicy: "require" | "system";
 }
 
 export interface ServerConfig {
@@ -148,6 +159,9 @@ export function resolveConfig(raw: unknown): MeshConfig {
         certPath: text(tls["certPath"], "") || undefined,
         keyPath: text(tls["keyPath"], "") || undefined,
         fingerprintSha256: text(tls["fingerprintSha256"], "").replace(/[^0-9a-fA-F]/g, "").toLowerCase() || undefined,
+        // Only the two documented values are accepted; anything else falls back to the
+        // strict default rather than silently weakening certificate checking.
+        certificatePolicy: tls["certificatePolicy"] === "system" ? "system" : "require",
       },
     },
     peers,
