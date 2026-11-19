@@ -1,9 +1,9 @@
-﻿// The settings page talks to the Host through one route. These tests pin the envelope it
+// The settings page talks to the Host through one route. These tests pin the envelope it
 // receives, because a wrong shape shows up as a blank page rather than an error.
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerSettingsRoute, SETTINGS_METHOD, SETTINGS_ROUTE } from "../lib/peer/settings-route.js";
+import { createSettingsRoute, registerSettingsRoute, SETTINGS_METHOD, SETTINGS_ROUTE } from "../lib/peer/settings-route.js";
 
 /** A connection service that records the registered route. */
 function fakeConnection() {
@@ -63,9 +63,16 @@ test("registers one buffered POST route at the documented path", () => {
   assert.equal(route.requestBody, "buffered");
 });
 
-test("returns no disposer when the composition has no connection service", () => {
+test("a host with neither inject nor a live connection still returns a disposer", () => {
+  // The contract is "always hand back something to call": an optional dependency must not
+  // make the caller special-case teardown. Here neither path can register, so the
+  // disposer is a no-op — but it exists.
+  const logged = [];
   const ctx = { get: () => undefined };
-  assert.equal(registerSettingsRoute(ctx, { manager: fakeManager().manager, log: () => {} }), undefined);
+  const dispose = registerSettingsRoute(ctx, { manager: fakeManager().manager, log: (m) => logged.push(m) });
+  assert.equal(typeof dispose, "function");
+  assert.doesNotThrow(() => dispose());
+  assert.ok(logged.some((line) => line.includes("cannot defer")), "the absence is reported, not swallowed");
 });
 
 test("read returns the snapshot plus what the operator can act on", async () => {
@@ -148,4 +155,50 @@ test("peer/add and connect both reach the manager", async () => {
   const connected = await post(connection.routes[0], { action: "connect" });
   assert.equal(connected.result.ok, true);
   assert.ok(fake.calls.some((call) => call[0] === "connect"));
+});
+
+// The bug this guards: reading ctx.get("connection") during apply returns undefined when
+// the connection row activates after this plugin. The route then never registers, the
+// browser gets HTTP 404 on every call, and nothing else about the plugin looks wrong.
+test("waits for a connection service that activates later", () => {
+  let deferred = null;
+  const registered = [];
+  const ctx = {
+    // Not available yet, exactly like a sibling row that activates afterwards.
+    get: () => undefined,
+    inject: (deps, callback) => { deferred = { deps, callback }; return () => {}; },
+  };
+  const dispose = registerSettingsRoute(ctx, { manager: fakeManager().manager, log: () => {} });
+  assert.equal(typeof dispose, "function");
+  assert.deepEqual(deferred.deps, ["connection"]);
+  assert.equal(registered.length, 0, "nothing may register before the service exists");
+
+  // Now the service appears; the deferred callback runs and registers the route.
+  const connection = { fetch: { register: (route) => { registered.push(route); return async () => {}; } } };
+  const scope = { get: (name) => (name === "connection" ? connection : undefined) };
+  const stop = deferred.callback(scope);
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].path, SETTINGS_ROUTE);
+  assert.equal(typeof stop, "function");
+});
+
+test("registers immediately when the service is already active", () => {
+  const connection = fakeConnection();
+  const ctx = {
+    get: (name) => (name === "connection" ? connection : undefined),
+    inject: (deps, callback) => { callback({ get: (n) => (n === "connection" ? connection : undefined) }); return () => {}; },
+  };
+  registerSettingsRoute(ctx, { manager: fakeManager().manager, log: () => {} });
+  assert.equal(connection.routes.length, 1);
+});
+
+test("createSettingsRoute builds the route without any service", async () => {
+  const route = createSettingsRoute({ manager: fakeManager().manager, log: () => {} });
+  assert.equal(route.path, SETTINGS_ROUTE);
+  const body = await (await route.fetch(new Request(`http://127.0.0.1${SETTINGS_ROUTE}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "x", method: SETTINGS_METHOD, payload: { action: "read" } }),
+  }))).json();
+  assert.equal(body.result.ok, true);
 });

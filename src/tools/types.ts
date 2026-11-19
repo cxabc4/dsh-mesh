@@ -76,6 +76,16 @@ export interface MeshContext {
   logger: Logger;
   get(name: string): unknown;
   effect(dispose: () => void | Promise<void>): () => void;
+  /**
+   * Deferred dependency access: the callback runs when every named service is active,
+   * including a service that activates after this plugin, and its return value is the
+   * disposer collected on teardown.
+   *
+   * This matters for an optional dependency such as `connection`: reading `ctx.get` during
+   * `apply` returns undefined when the providing row activates later, and the registration
+   * then silently never happens — the browser sees HTTP 404 while the plugin looks healthy.
+   */
+  inject?(deps: string[], callback: (scope: MeshContext) => (() => void) | void): () => void;
   on?(name: string, listener: (...args: never[]) => void, options?: { global?: boolean }): () => void;
   emit?(name: string): void;
 }
