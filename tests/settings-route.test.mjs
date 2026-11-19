@@ -67,12 +67,16 @@ test("a host with neither inject nor a live connection still returns a disposer"
   // The contract is "always hand back something to call": an optional dependency must not
   // make the caller special-case teardown. Here neither path can register, so the
   // disposer is a no-op — but it exists.
-  const logged = [];
+  const noted = [];
   const ctx = { get: () => undefined };
-  const dispose = registerSettingsRoute(ctx, { manager: fakeManager().manager, log: (m) => logged.push(m) });
+  const dispose = registerSettingsRoute(ctx, {
+    manager: fakeManager().manager,
+    log: () => {},
+    note: (outcome) => noted.push(outcome),
+  });
   assert.equal(typeof dispose, "function");
   assert.doesNotThrow(() => dispose());
-  assert.ok(logged.some((line) => line.includes("cannot defer")), "the absence is reported, not swallowed");
+  assert.ok(noted.some((line) => line.includes("cannot defer")), "the absence is reported, not swallowed");
 });
 
 test("read returns the snapshot plus what the operator can act on", async () => {

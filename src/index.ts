@@ -203,12 +203,23 @@ export async function apply(ctx: MeshContext, rawConfig: unknown = {}): Promise<
   // The settings page in the browser needs live state and the pairing actions, and it
   // reaches them through one Host route. A composition without `ctx.connection` (CLI-only)
   // simply gets no page data; the listener and the tools above are unaffected.
+  // Where the settings route registration stands is written to the state directory, not
+  // just the log: the browser can only report "HTTP 404", and the three ways that happens
+  // (service absent at apply time, registry rejected the route, registration succeeded)
+  // are indistinguishable from there. This file is the only place that tells them apart.
+  const settingsRouteLog = path.join(stateDir, "settings-route.log");
   const settingsRoute = registerSettingsRoute(ctx, {
     manager,
     log: (message) => logger.info(`dsh-mesh: ${message}`),
+    note: (outcome) => {
+      try {
+        fs.appendFileSync(settingsRouteLog, `${new Date().toISOString()} ${outcome}\n`, "utf8");
+      } catch {
+        /* diagnostics must never break the feature they describe */
+      }
+    },
   });
   if (settingsRoute !== undefined) disposers.push(settingsRoute);
-  else logger.info("dsh-mesh: no ctx.connection.fetch in this composition; the settings page will report that it cannot read state");
 
   const prompt = ctx.get("systemPrompt") as
     | {

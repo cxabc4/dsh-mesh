@@ -41,6 +41,14 @@ export interface SettingsTargets {
   manager: MeshManager;
   /** Called after a change so the page can show the effect on the next read. */
   log(message: string): void;
+  /**
+   * Where the route registration stands, reported once per outcome.
+   *
+   * Without this, "the page shows nothing" has no diagnosis: a service that was absent at
+   * apply time, a fetch registry that rejected the route, and a route that registered fine
+   * all look identical from the browser.
+   */
+  note?(outcome: string): void;
 }
 
 type ActionRunner = (payload: Record<string, unknown>) => unknown;
@@ -196,19 +204,35 @@ export function createSettingsRoute(targets: SettingsTargets): ConnectionFetchRo
 export function registerSettingsRoute(ctx: MeshContext, targets: SettingsTargets): (() => void) | undefined {
   const route = createSettingsRoute(targets);
   const disposers: Array<() => void> = [];
+  const note = (outcome: string): void => targets.note?.(outcome);
   const settle = (connection: ConnectionService | undefined): boolean => {
     const fetch = connection?.fetch;
-    if (fetch === undefined || typeof fetch.register !== "function") return false;
+    if (fetch === undefined || typeof fetch.register !== "function") {
+      note(connection === undefined ? "waiting: no connection service yet" : "waiting: connection has no fetch registry");
+      return false;
+    }
     try {
       const dispose = fetch.register(route);
       disposers.push(() => {
         // The registered disposer returns a Promise; plugin teardown is synchronous.
         void dispose();
       });
+      note(`registered ${SETTINGS_ROUTE}`);
       return true;
     } catch (error) {
+      note(`failed: ${error instanceof Error ? error.message : String(error)}`);
       targets.log(`could not register the settings route: ${error instanceof Error ? error.message : String(error)}`);
       return false;
+    }
+  };
+
+  const teardown = (): void => {
+    for (const dispose of disposers.splice(0).reverse()) {
+      try {
+        dispose();
+      } catch {
+        /* a failed teardown must not mask the first error */
+      }
     }
   };
 
@@ -218,42 +242,16 @@ export function registerSettingsRoute(ctx: MeshContext, targets: SettingsTargets
     ctx.inject(["connection"], (scope) => {
       const connection = scope.get("connection") as ConnectionService | undefined;
       if (!settle(connection)) {
-        targets.log(
-          "connection is active but exposes no fetch registry; the settings page will report that it cannot read state",
-        );
+        note("connection is active but the route was not registered; the settings page will report that it cannot read state");
       }
-      return () => {
-        for (const dispose of disposers.splice(0).reverse()) {
-          try {
-            dispose();
-          } catch {
-            /* a failed teardown must not mask the first error */
-          }
-        }
-      };
+      return teardown;
     });
-    return () => {
-      for (const dispose of disposers.splice(0).reverse()) {
-        try {
-          dispose();
-        } catch {
-          /* ignore */
-        }
-      }
-    };
+    return teardown;
   }
 
   // Hosts without `ctx.inject`: one synchronous attempt, best effort.
   if (!settle(ctx.get("connection") as ConnectionService | undefined)) {
-    targets.log("this host cannot defer a connection dependency; the settings page will report that it cannot read state");
+    note("this host cannot defer a connection dependency; the settings page will report that it cannot read state");
   }
-  return () => {
-    for (const dispose of disposers.splice(0).reverse()) {
-      try {
-        dispose();
-      } catch {
-        /* ignore */
-      }
-    }
-  };
+  return teardown;
 }
