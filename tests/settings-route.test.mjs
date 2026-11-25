@@ -27,9 +27,14 @@ function fakeManager(overrides = {}) {
       permissions: { allowedRoots: [], allowWrite: true, allowExec: true, allowDelegate: true, maxDelegationDepth: 1 },
     }),
     capabilityDocument: () => ({ methods: ["mesh.status"] }),
-    pairingStringFor: () => undefined,
-    createPairingOffer: (device) => { calls.push(["createPairingOffer", device]); return { remoteDeviceId: device, code: "XXXXX-YYYYY", pairingString: `this|XXXXX-YYYYY|secret`, createdAt: 1 }; },
-    acceptPairingString: (line, alias) => { calls.push(["acceptPairingString", line, alias]); return { peerId: "eeeeee-ffffff-gggggg-hhhhhh", code: "XXXXX-YYYYY" }; },
+    pairingOfferFor: () => undefined,
+    pairingMaterialFor: () => undefined,
+    createPairingJson: (device) => {
+      calls.push(["createPairingJson", device]);
+      const json = { kind: "dsh-mesh.pairing", version: 1, deviceId: "aaaaaa-bbbbbb-cccccc-dddddd", name: "PC", peer: device, code: "ZT9-HLQ", secret: "c2VjcmV0", createdAt: 1, acceptWith: "mesh_pair action=accept", note: "note" };
+      return { remoteDeviceId: device, code: "ZT9-HLQ", pairingString: `this|ZT9-HLQ|secret`, createdAt: 1, json };
+    },
+    acceptPairingPayload: (line, alias) => { calls.push(["acceptPairingPayload", line, alias]); return { peerId: "eeeeee-ffffff-gggggg-hhhhhh", code: "ZT9-HLQ" }; },
     removePairing: (id) => { calls.push(["removePairing", id]); return true; },
     addPeer: (alias, url, auto) => { calls.push(["addPeer", alias, url, auto]); return { alias, url, autoConnect: auto }; },
     connect: (device) => { calls.push(["connect", device]); return []; },
@@ -82,7 +87,15 @@ test("a host with neither inject nor a live connection still returns a disposer"
 test("read returns the snapshot plus what the operator can act on", async () => {
   const connection = fakeConnection();
   const fake = fakeManager({
-    pairingStringFor: () => "aaaaaa-bbbbbb-cccccc-dddddd|XXXXX-YYYYY|c2VjcmV0",
+    pairingOfferFor: () => ({
+      kind: "dsh-mesh.pairing", version: 1, deviceId: "aaaaaa-bbbbbb-cccccc-dddddd", name: "PC",
+      peer: "eeeeee-ffffff-gggggg-hhhhhh", code: "ZT9-HLQ", secret: "c2VjcmV0", createdAt: 5,
+      acceptWith: "mesh_pair action=accept", note: "",
+    }),
+    pairingMaterialFor: () => ({
+      code: "ZT9-HLQ", secret: Buffer.from("c2VjcmV0", "base64"), createdAt: 5,
+      peers: ["aaaaaa-bbbbbb-cccccc-dddddd", "eeeeee-ffffff-gggggg-hhhhhh"],
+    }),
   });
   fake.manager.snapshot = () => ({
     device: { deviceId: "aaaaaa-bbbbbb-cccccc-dddddd", name: "PC", platform: "win32", arch: "x64", node: "v24.0.0" },
@@ -113,8 +126,8 @@ test("pair/create refuses an empty device and passes the rest through", async ()
   assert.deepEqual(empty.result.error.details, {});
   const ok = await post(connection.routes[0], { action: "pair/create", device: "eeeeee-ffffff-gggggg-hhhhhh" });
   assert.equal(ok.result.ok, true);
-  assert.equal(ok.result.value.code, "XXXXX-YYYYY");
-  assert.deepEqual(fake.calls, [["createPairingOffer", "eeeeee-ffffff-gggggg-hhhhhh"]].flat().length ? fake.calls : []);
+  assert.equal(ok.result.value.code, "ZT9-HLQ");
+  assert.deepEqual(fake.calls, [["createPairingJson", "eeeeee-ffffff-gggggg-hhhhhh"]]);
 });
 
 test("an unknown action fails with the list of valid ones", async () => {
@@ -129,7 +142,7 @@ test("an unknown action fails with the list of valid ones", async () => {
 test("a handler throw becomes a typed failure carrying its code", async () => {
   const connection = fakeConnection();
   const fake = fakeManager({
-    createPairingOffer: () => { const error = new Error("self pairing is not allowed"); error.code = "SELF_PAIRING"; throw error; },
+    createPairingJson: () => { const error = new Error("self pairing is not allowed"); error.code = "SELF_PAIRING"; throw error; },
   });
   registerSettingsRoute({ get: (n) => (n === "connection" ? connection : undefined) }, { manager: fake.manager, log: () => {} });
   const body = await post(connection.routes[0], { action: "pair/create", device: "aaaaaa-bbbbbb-cccccc-dddddd" });

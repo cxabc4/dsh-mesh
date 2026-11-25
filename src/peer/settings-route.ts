@@ -97,13 +97,23 @@ function createActions(targets: SettingsTargets): Record<string, ActionRunner> {
       const snapshot = manager.snapshot();
       return {
         snapshot,
-        // What the operator would paste into the other device, when a pairing exists.
-        pairingStrings: snapshot.paired.map((entry) => ({
-          deviceId: entry.deviceId,
-          code: entry.code,
-          createdAt: entry.createdAt,
-          pairingString: manager.pairingStringFor(entry.deviceId) ?? undefined,
-        })),
+        // What the operator hands to the other device, when a pairing exists. Both forms
+        // are included: the JSON is what the other device's agent reads, the line is what
+        // an older build of this plugin still accepts.
+        pairingStrings: snapshot.paired.flatMap((entry) => {
+          const material = manager.pairingMaterialFor(entry.deviceId);
+          const json = manager.pairingOfferFor(entry.deviceId);
+          return [{
+            deviceId: entry.deviceId,
+            code: entry.code,
+            createdAt: entry.createdAt,
+            pairingJson: json,
+            pairingString:
+              material === undefined
+                ? undefined
+                : `${snapshot.device.deviceId}|${entry.code}|${material.secret.toString("base64")}`,
+          }];
+        }),
         // The method list the other side will see; useful to explain what a peer can do.
         capabilities: manager.capabilityDocument(),
       };
@@ -111,7 +121,7 @@ function createActions(targets: SettingsTargets): Record<string, ActionRunner> {
     "pair/create"(payload) {
       const remote = text(payload["device"]);
       if (remote === "") throw new SettingsError("PAIR_REMOTE_REQUIRED", "enter the other device's id");
-      const offer = manager.createPairingOffer(remote);
+      const offer = manager.createPairingJson(remote);
       targets.log(`pairing created for ${remote}`);
       return offer;
     },
@@ -119,7 +129,7 @@ function createActions(targets: SettingsTargets): Record<string, ActionRunner> {
       const line = text(payload["pairingString"]);
       if (line === "") throw new SettingsError("PAIR_STRING_REQUIRED", "paste the whole line from the other device");
       const alias = text(payload["alias"]) || undefined;
-      const accepted = manager.acceptPairingString(line, alias);
+      const accepted = manager.acceptPairingPayload(line, alias);
       targets.log(`pairing accepted for ${accepted.peerId}`);
       return accepted;
     },
