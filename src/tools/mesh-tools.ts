@@ -562,9 +562,17 @@ export function meshPairTool(deps: ToolDependencies): ToolDefinition {
           String(args["pairingString"] ?? ""),
           typeof args["alias"] === "string" ? args["alias"] : undefined,
         );
+        // When the payload carried a route, accept already installed it; the caller only
+        // needs to know whether anything else is left to do.
+        const configured = "peer" in accepted;
         return {
           ...accepted,
-          next: "Add a peers entry on this side with that alias and the other device's ws:// or wss:// url; mesh_connect starts it.",
+          ...(configured
+            ? { next: "Pairing installed and the route from the payload is configured; mesh_connect starts it now." }
+            : {
+                next:
+                  "Pairing installed. This payload carried no address, so configure the route with mesh_configure (alias + the other device's ws:// or wss:// url), then mesh_connect.",
+              }),
         };
       }
       if (action === "remove") {
@@ -617,6 +625,77 @@ export function meshDisconnectTool(deps: ToolDependencies): ToolDefinition {
 }
 
 /** Every tool this plugin registers, in registration order. */
+/**
+ * Install a peer route at runtime.
+ *
+ * A device whose only operator is its agent has no settings UI, so without this the agent
+ * could pair but not configure the route — it would have to hand-edit the profile patch and
+ * restart. This changes the running composition; `durable` says what to write for the next
+ * boot.
+ */
+export function meshConfigureTool(deps: ToolDependencies): ToolDefinition {
+  return {
+    name: "mesh_configure",
+    description:
+      "Add a peer route now, without editing a config file or restarting. Accepts the `peerConfig` object from a dsh-mesh pairing JSON, or the same fields spelled out. The change lives for this process only: the returned `durable` snippet is what to write into the profile patch to keep it after a restart.",
+    parameters: {
+      type: "object",
+      properties: {
+        alias: { type: "string", description: "Short local name for that device, e.g. \"pc\" or \"phone\"." },
+        url: { type: "string", description: "Its ws:// or wss:// address, ending in /dsh-mesh." },
+        autoConnect: { type: "boolean", description: "Dial it immediately. Defaults to true." },
+        peerConfig: {
+          type: "object",
+          description: "Alternatively: the peerConfig object copied verbatim from a pairing JSON.",
+        },
+      },
+      additionalProperties: false,
+    },
+    output: {
+      schema: { type: "object" },
+      render: (_args, value) => text(renderConfigured(value as Record<string, unknown>)),
+    },
+    async execute(args) {
+      const nested = typeof args["peerConfig"] === "object" && args["peerConfig"] !== null
+        ? (args["peerConfig"] as Record<string, unknown>)
+        : {};
+      const alias = String(args["alias"] ?? nested["alias"] ?? "").trim();
+      const url = String(args["url"] ?? nested["url"] ?? "").trim();
+      const autoConnect = args["autoConnect"] !== false && nested["autoConnect"] !== false;
+      if (url === "") throw new Error("BAD_PARAMS: mesh_configure needs a url (ws:// or wss://)");
+      const status = deps.manager.configurePeer({ alias: alias === "" ? url : alias, url, autoConnect });
+      return {
+        peer: status,
+        durable: {
+          peers: [{ alias: status.alias, url, autoConnect }],
+          note: "Add this to the `peers` list under the dsh-mesh config in the profile cordis.patch.yml to keep it after a restart.",
+        },
+      };
+    },
+  };
+}
+
+function renderConfigured(value: Record<string, unknown>): string {
+  const peer = typeof value["peer"] === "object" && value["peer"] !== null ? (value["peer"] as Record<string, unknown>) : {};
+  const lines = [
+    `peer ${String(peer["alias"] ?? "")} [${String(peer["state"] ?? "")}] url ${String(peer["url"] ?? "")}`,
+  ];
+  if (peer["lastError"] !== undefined && peer["lastError"] !== null) {
+    const error = peer["lastError"] as Record<string, unknown>;
+    lines.push(`last error: ${String(error["code"] ?? "")} ${String(error["message"] ?? "")}`);
+  }
+  const durable = typeof value["durable"] === "object" && value["durable"] !== null ? (value["durable"] as Record<string, unknown>) : {};
+  if (Array.isArray(durable["peers"])) {
+    lines.push("", "to keep this after a restart, add under the dsh-mesh config:");
+    for (const entry of durable["peers"] as Array<Record<string, unknown>>) {
+      lines.push(`  - alias: ${String(entry["alias"] ?? "")}`);
+      lines.push(`    url: ${String(entry["url"] ?? "")}`);
+      lines.push(`    autoConnect: ${String(entry["autoConnect"] === true)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export function createTools(deps: ToolDependencies): ToolDefinition[] {
   return [
     meshStatusTool(deps),
@@ -636,6 +715,7 @@ export function createTools(deps: ToolDependencies): ToolDefinition[] {
     meshPairTool(deps),
     meshConnectTool(deps),
     meshDisconnectTool(deps),
+    meshConfigureTool(deps),
   ];
 }
 

@@ -75,6 +75,14 @@ export interface PairingJson {
   createdAt: number;
   /** The tool call the receiving agent makes. */
   acceptWith: string;
+  /** The tool call that installs the peer route, once the pairing is accepted. */
+  configureWith?: string;
+  /**
+   * The `peers` entry the receiving device needs, when the minting side knows its own
+   * public address. Empty when it does not — a plugin listening on loopback cannot see the
+   * tunnel in front of it, so the operator fills this in the settings page.
+   */
+  peerConfig?: { alias: string; url: string; autoConnect: boolean; certificatePolicy?: "system" };
   note: string;
 }
 
@@ -85,7 +93,7 @@ export interface PairingJsonOffer extends PairingOffer {
 
 export interface MeshSnapshot {
   device: { deviceId: string; name: string; platform: string; arch: string; node: string };
-  server: { enabled: boolean; running: boolean; host: string; port: number; secure: boolean; url: string | undefined; startedAt: number | undefined };
+  server: { enabled: boolean; running: boolean; host: string; port: number; secure: boolean; url: string | undefined; publicUrl: string | undefined; startedAt: number | undefined };
   peers: LinkStatus[];
   paired: Array<{ deviceId: string; code: string; createdAt: number }>;
   counts: { online: number; offline: number; failed: number };
@@ -232,6 +240,9 @@ export class MeshManager {
         port: this.#serverInfo?.port ?? server.port,
         secure: this.#serverInfo?.secure === true,
         url: this.#serverInfo?.url,
+        // What peers should dial, when the operator declared it. Distinct from `url`, which
+        // is the loopback listener this process actually bound.
+        publicUrl: config.server.publicUrl,
         startedAt: this.#serverInfo?.startedAt,
       },
       peers,
@@ -420,6 +431,20 @@ export class MeshManager {
   pairingOfferFor(deviceId: string): PairingJson | undefined {
     const material = this.#pairings.get(deviceId);
     if (material === undefined) return undefined;
+    const config = this.#deps.config;
+    // When the operator has declared a public address, the receiving device gets the
+    // complete route as well as the secret, so one paste configures everything. Without it
+    // the payload still pairs, and the route is filled in on the other side.
+    const publicUrl = config.server.publicUrl;
+    const peerConfig =
+      publicUrl === undefined
+        ? undefined
+        : {
+            alias: "pc",
+            url: publicUrl.includes("/dsh-mesh") ? publicUrl : `${publicUrl.replace(/\/+$/, "")}${MESH_PATH}`,
+            autoConnect: true,
+            ...(config.server.tls.certificatePolicy === "system" ? { certificatePolicy: "system" as const } : {}),
+          };
     return {
       kind: "dsh-mesh.pairing",
       version: 1,
@@ -430,8 +455,10 @@ export class MeshManager {
       secret: material.secret.toString("base64"),
       createdAt: material.createdAt,
       acceptWith: `mesh_pair action="accept" pairingString="<this JSON as a single line>"`,
+      ...(peerConfig === undefined ? {} : { configureWith: `mesh_configure config=<the peerConfig object above>` }),
+      ...(peerConfig === undefined ? {} : { peerConfig }),
       note:
-        "Give this JSON to the other device. It installs the matching pairing; the same secret must exist on both sides or the handshake is refused.",
+        "Give this JSON to the other device. One paste installs the pairing, and when peerConfig is present the route too.",
     };
   }
 
@@ -452,7 +479,13 @@ export class MeshManager {
   }
 
   /** Parse a pairing payload in either accepted form. */
-  parsePairingPayload(text: string): { deviceId: string; code: string; secret: string } {
+  parsePairingPayload(text: string): {
+    deviceId: string;
+    code: string;
+    secret: string;
+    /** The route the minting device says it is reachable at, when it declared one. */
+    peerConfig: { alias: string; url: string; autoConnect: boolean; certificatePolicy?: "system" } | undefined;
+  } {
     const trimmed = text.trim();
     if (trimmed.startsWith("{")) {
       let parsed: unknown;
@@ -474,7 +507,29 @@ export class MeshManager {
       if (deviceId === "" || code === "" || secret === "") {
         throw new RpcError("BAD_PAIRING_JSON", "the pairing JSON is missing deviceId, code, or secret");
       }
-      return { deviceId, code, secret };
+      // `peer` names the device this pairing was minted FOR. Checking it catches the
+      // ordinary mistake of pasting a payload addressed to someone else; it is advisory
+      // rather than fatal for a hand-written payload, so an absent field is accepted.
+      const peer = typeof body["peer"] === "string" ? body["peer"].trim() : "";
+      if (peer !== "" && peer !== this.#identity.deviceId) {
+        throw new RpcError(
+          "PAIRING_ADDRESSED_ELSEWHERE",
+          `this pairing is addressed to device "${peer}", but this device is "${this.#identity.deviceId}"`,
+        );
+      }
+      const rawConfig = body["peerConfig"];
+      const configBody = typeof rawConfig === "object" && rawConfig !== null ? (rawConfig as Record<string, unknown>) : {};
+      const configUrl = typeof configBody["url"] === "string" ? configBody["url"].trim() : "";
+      const peerConfig =
+        configUrl === ""
+          ? undefined
+          : {
+              alias: typeof configBody["alias"] === "string" && configBody["alias"].trim() !== "" ? configBody["alias"].trim() : "pc",
+              url: configUrl,
+              autoConnect: configBody["autoConnect"] !== false,
+              ...(configBody["certificatePolicy"] === "system" ? { certificatePolicy: "system" as const } : {}),
+            };
+      return { deviceId, code, secret, peerConfig };
     }
     const parts = trimmed.split("|");
     if (parts.length !== 3) {
@@ -484,7 +539,8 @@ export class MeshManager {
       );
     }
     const [deviceId, code, secret] = parts.map((part) => part.trim());
-    return { deviceId, code, secret };
+    // The line form carries no route, so the caller keeps whatever is configured already.
+    return { deviceId, code, secret, peerConfig: undefined };
   }
 
   /**
@@ -494,8 +550,8 @@ export class MeshManager {
    * instead of installing a key that can never authenticate. That check is what makes the
    * short code useful: it is a checksum over the secret, not a substitute for it.
    */
-  acceptPairingPayload(text: string, alias?: string): { peerId: string; code: string } {
-    const { deviceId: peerId, code, secret: secretText } = this.parsePairingPayload(text);
+  acceptPairingPayload(text: string, alias?: string): { peerId: string; code: string; peer?: LinkStatus } {
+    const { deviceId: peerId, code, secret: secretText, peerConfig } = this.parsePairingPayload(text);
     if (!looksLikeDeviceId(peerId)) {
       throw new RpcError("BAD_PAIRING_STRING", `"${peerId}" is not a dsh-mesh device id`);
     }
@@ -525,9 +581,29 @@ export class MeshManager {
       detail: `code ${code}`,
       outcome: "ok",
     });
+    // A payload that carries the minting device's address configures the route too, so one
+    // paste does both. That route entry becomes the link; adding a second inbound-only link
+    // first would leave the peer listed twice.
+    if (peerConfig !== undefined) {
+      const configured = this.addPeer(peerConfig.alias, peerConfig.url, peerConfig.autoConnect);
+      return { peerId, code, peer: configured };
+    }
+    // Without an address the link stays inbound-only: this side can be dialed, not dial.
     const link = this.#linkFor(alias === undefined ? peerId : alias, undefined);
     if (alias !== undefined) link.alias = alias;
     return { peerId, code };
+  }
+
+  /**
+   * Install a peer route at runtime (mesh_configure tool).
+   *
+   * The settings page has its own route for this; the tool exists because a device whose
+   * agent is the only operator (no settings UI) otherwise has to hand-edit a config file
+   * and restart. This changes the running composition only — the durable copy is the
+   * `peers` entry in the profile patch, which the caller is told to write.
+   */
+  configurePeer(input: { alias: string; url: string; autoConnect?: boolean }): LinkStatus {
+    return this.addPeer(input.alias, input.url, input.autoConnect !== false);
   }
 
   /**
@@ -539,6 +615,16 @@ export class MeshManager {
    */
   acceptPairingString(pairingString: string, alias?: string): { peerId: string; code: string } {
     return this.acceptPairingPayload(pairingString, alias);
+  }
+
+  /**
+   * Signal that something outside the link table changed.
+   *
+   * Used when the operator edits a value the snapshot reports (the advertised public
+   * address), so the settings page re-reads it instead of showing a stale copy.
+   */
+  notifyChange(): void {
+    this.#onChange();
   }
 
   /** Connect a configured peer now (mesh_connect tool). */

@@ -211,6 +211,14 @@ export async function apply(ctx: MeshContext, rawConfig: unknown = {}): Promise<
   const settingsRoute = registerSettingsRoute(ctx, {
     manager,
     log: (message) => logger.info(`dsh-mesh: ${message}`),
+    // The route needs both directions of the public address: read it to render, write it to
+    // make a generated pairing carry the route. Changing it only affects what is advertised
+    // from here on; existing links keep the address they were opened with.
+    config: () => config,
+    setPublicUrl: (url) => {
+      config.server.publicUrl = url;
+      manager.notifyChange();
+    },
     note: (outcome) => {
       try {
         fs.appendFileSync(settingsRouteLog, `${new Date().toISOString()} ${outcome}\n`, "utf8");

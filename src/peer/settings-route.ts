@@ -41,6 +41,10 @@ export interface SettingsTargets {
   manager: MeshManager;
   /** Called after a change so the page can show the effect on the next read. */
   log(message: string): void;
+  /** The live config, read-only: the page shows what is actually in effect. */
+  config?(): { server: { publicUrl: string | undefined } };
+  /** Record the address peers should dial; survives until this process exits. */
+  setPublicUrl?(url: string | undefined): void;
   /**
    * Where the route registration stands, reported once per outcome.
    *
@@ -155,6 +159,33 @@ function createActions(targets: SettingsTargets): Record<string, ActionRunner> {
       const device = text(payload["device"]) || undefined;
       return manager.disconnect(device);
     },
+    /**
+     * Record the address peers should dial.
+     *
+     * The plugin cannot see the tunnel in front of its loopback listener, so this is the
+     * one value only the operator knows. Storing it lets a generated pairing carry the
+     * route as well as the secret, which is what turns the transfer into one paste.
+     */
+    "set/public-url"(payload) {
+      const url = text(payload["url"]);
+      if (url !== "" && !/^wss?:\/\//.test(url)) {
+        throw new SettingsError("BAD_PUBLIC_URL", "the address must start with ws:// or wss://");
+      }
+      const next = url === "" ? undefined : url;
+      const previous = targets.config?.().server.publicUrl;
+      if (previous === next) return { publicUrl: next ?? null, changed: false };
+      targets.setPublicUrl?.(next);
+      targets.log(`public url ${next === undefined ? "cleared" : `set to ${next}`}`);
+      return {
+        publicUrl: next ?? null,
+        changed: true,
+        durable: {
+          note: "This lives in the running composition only. To keep it after a restart, set server.publicUrl in the profile cordis.patch.yml.",
+          snippet: next === undefined ? "" : `    server:\n      publicUrl: "${next}"`,
+        },
+      };
+    },
+
     async probe(payload) {
       const url = text(payload["url"]);
       if (url === "") throw new SettingsError("PROBE_URL_REQUIRED", "enter an address to probe");

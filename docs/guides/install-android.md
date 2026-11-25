@@ -22,10 +22,10 @@ dsh-mesh 发布在公开仓库，所以从 git 地址装最省事——**不需�
 
 ```bash
 # 在 DSH Go 的终端 / rootfs shell 中
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.4.0"
 ```
 
-地址末尾的 `#v0.1.1` 是版本钉子：手机固定在已发布的这一版，仓库 `main` 后续前进不会让重装悄悄换版本。要升级就把 tag 换成新的再装一次。
+地址末尾的 `#v0.4.0` 是版本钉子：手机固定在已发布的这一版，仓库 `main` 后续前进不会让重装悄悄换版本。要升级就把 tag 换成新的再装一次。
 
 > 一份从零到连通的完整操作单（含 PC 侧核对、配对、验证、排错）在 [phone-setup.md](phone-setup.md)。
 
@@ -34,7 +34,7 @@ dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.
 如果 rootfs 里没有 `dsh` 命令，改用自带 pnpm 直连：
 
 ```bash
-node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
+node <pnpm>/pnpm.mjs --dir "$DSH_HOME/profiles/desktop" add "git+https://github.com/cxabc4/dsh-mesh.git#v0.4.0"
 ```
 
 也可以先把仓库 clone 到手机本地目录再装本地路径（`add /path/to/dsh-mesh`），两者等价；git 形式的好处是以后重装能直接拿到仓库里的新版本。

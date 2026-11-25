@@ -49,7 +49,7 @@ dsh --version       # 应能输出版本；没有这个命令就走 1.3
 ### 1.2 安装（推荐）
 
 ```bash
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.4.0"
 ```
 
 等它跑完。成功的话最后几行会是：
@@ -68,7 +68,7 @@ Done in ... using pnpm ...
 ```bash
 node "$DSH_HOME/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm/bin/pnpm.mjs" \
   --dir "$DSH_HOME/profiles/desktop" \
-  add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
+  add "git+https://github.com/cxabc4/dsh-mesh.git#v0.4.0"
 ```
 
 > 路径若不对，用 `find / -name pnpm.mjs -path '*dependencies*' 2>/dev/null` 找一下。
@@ -235,9 +235,35 @@ JSON 里已经写好了 `acceptWith`，所以手机上更省事的做法是直�
 
 > 顺序不能反：`create` 需要知道对方的 device id，所以必须**手机先出自己的 id**，PC 再生成配对。老版本的 `deviceId|code|secret` 单行格式仍然能接受，所以已经配对过的设备不用重做。
 
-### 3.4 补配数据（手机端是否需要额外配置）
+### 3.4 一键配好（推荐）
 
-配对只装密钥，路由信息要另外配。手机侧还需要一条 `peers` 配置指向 PC（见第 2 节），PC 侧一般不需要。如果手机端没有 Web 设置页，把下面这段直接给手机上的 agent，让它写进配置：
+如果 PC 上已经设了「对外地址」（`server.publicUrl`，就是隧道那头的 `wss://域名:端口/dsh-mesh`），配对 JSON 会**自带路由**，形如：
+
+```json
+{
+  "kind": "dsh-mesh.pairing",
+  "deviceId": "<PC 的 id>",
+  "peer": "<手机的 id>",
+  "code": "ZT9-HLQ",
+  "secret": "<base64>",
+  "peerConfig": { "alias": "pc", "url": "wss://<隧道域名>:<端口>/dsh-mesh", "autoConnect": true, "certificatePolicy": "system" }
+}
+```
+
+把**整段 JSON 粘到手机的 DSH 对话框**里，说一句「按这个配对」，agent 一次做完：装密钥、配路由。手机侧不需要任何手工编辑。
+
+如果 JSON 里没有 `peerConfig`，agent 会说还差地址；这时把地址给它，用 `mesh_configure` 补上即可，**不用重启**。
+
+> 让配对 JSON 带上路由，PC 侧只需设一次 `publicUrl`，写进 `C:\Users\<你>\.dsh\profiles\desktop\cordis.patch.yml` 的 dsh-mesh 段：
+> ```yaml
+> server:
+>   publicUrl: "wss://<隧道域名>:<端口>/dsh-mesh"
+> ```
+> 改完热重载生效。
+
+### 3.5 只有旧格式时
+
+老版本的 `deviceId|code|secret` 单行仍能接受，但它**不带路由**，所以还要在手机侧补一条 `peers`：
 
 ```yaml
 peers:
@@ -246,7 +272,7 @@ peers:
     autoConnect: true
 ```
 
-JSON 里的 `deviceId` 就是 PC 的 id，`peer` 是手机的 id——两个值都可以用来核对方向有没有弄反。
+JSON 里的 `deviceId` 是 PC 的 id，`peer` 是手机的 id——可以用来核对方向有没有弄反。
 
 ---
 
@@ -424,7 +450,7 @@ OUTSIDE_ROOTS: path "..." is outside every allowed root
 
 ```bash
 # 手机：装 + 配置 + 配对 + 连
-dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.1.1"
+dsh plugin --profile desktop add "git+https://github.com/cxabc4/dsh-mesh.git#v0.4.0"
 # 改 cordis.patch.yml：certificatePolicy: system + url wss://<你的隧道域名>:<公网端口>/dsh-mesh
 # 重启 App → mesh_status 拿手机 id → PC 上 mesh_pair create → 手机 mesh_pair accept → mesh_connect
 ```

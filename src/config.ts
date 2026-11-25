@@ -28,6 +28,15 @@ export interface ServerConfig {
   host: string;
   port: number;
   tls: TlsConfig;
+  /**
+   * The address peers should dial to reach this device, when it differs from the listener.
+   *
+   * The plugin binds loopback and cannot see the tunnel in front of it, so it cannot derive
+   * this. Setting it lets a generated pairing carry the route the other device needs, which
+   * turns "pair, then hand-edit a config file" into one paste. Left empty it simply is not
+   * advertised, and the operator supplies the address on the other device.
+   */
+  publicUrl: string | undefined;
 }
 
 export interface PeerConfig {
@@ -151,6 +160,9 @@ export function resolveConfig(raw: unknown): MeshConfig {
     server: {
       enabled: flag(server["enabled"], true),
       host: text(server["host"], "127.0.0.1"),
+      // Only ws:// or wss:// makes sense as a dial target; anything else is ignored rather
+      // than advertised to a peer as an address that cannot work.
+      publicUrl: /^wss?:\/\//.test(text(server["publicUrl"], "")) ? text(server["publicUrl"], "") : undefined,
       // Port 0 is legal and asks the OS for a free port; the test suite and any
       // "just try it" deployment rely on it. Anything above 65535 is clamped.
       port: numberIn(server["port"], 8765, 0, 65535),
