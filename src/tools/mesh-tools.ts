@@ -65,6 +65,24 @@ function numberArg(args: Record<string, unknown>, field: string): number | undef
 
 // ---- layer 1: status, files, commands, logs, transfer ----------------------
 
+/**
+ * Convert a value into something that survives a lossless JSON round trip.
+ *
+ * The Host validates tool output by requiring `JSON.parse(JSON.stringify(value))` to equal
+ * the input. An `undefined` property breaks that: `JSON.stringify` drops the key, so the
+ * value is not lossless and the whole tool call is reported as a failure even though the
+ * handler ran fine. Optional fields are therefore normalised to `null` at the boundary
+ * rather than being left as `undefined` deep in a snapshot.
+ */
+function lossless<T>(value: T): T {
+  if (value === undefined) return null as unknown as T;
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((entry) => lossless(entry)) as unknown as T;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) out[key] = lossless(entry);
+  return out as unknown as T;
+}
+
 export function meshStatusTool(deps: ToolDependencies): ToolDefinition {
   return {
     name: "mesh_status",
@@ -76,7 +94,9 @@ export function meshStatusTool(deps: ToolDependencies): ToolDefinition {
       render: (_args, value) => text(renderStatus(value as Record<string, unknown>)),
     },
     async execute() {
-      return deps.manager.snapshot();
+      // Snapshot fields are optional by design; normalise them so the Host's lossless
+      // round-trip check accepts the value.
+      return lossless(deps.manager.snapshot());
     },
   };
 }
@@ -546,14 +566,14 @@ export function meshPairTool(deps: ToolDependencies): ToolDefinition {
     async execute(args) {
       const action = String(args["action"] ?? "");
       const manager = deps.manager;
-      if (action === "list") return { deviceId: manager.deviceId, pairings: manager.listPairings(), peers: manager.snapshot().peers };
+      if (action === "list") return lossless({ deviceId: manager.deviceId, pairings: manager.listPairings(), peers: manager.snapshot().peers });
       if (action === "create") {
         const offer = manager.createPairingJson(String(args["device"] ?? ""));
         return {
           remoteDeviceId: offer.remoteDeviceId,
           code: offer.code,
           pairingString: offer.pairingString,
-          pairingJson: offer.json,
+          pairingJson: lossless(offer.json),
           next: "Send the JSON to the other device; its agent calls mesh_pair action=accept with it.",
         };
       }
@@ -600,7 +620,7 @@ export function meshConnectTool(deps: ToolDependencies): ToolDefinition {
       render: (_args, value) => text(renderPeerStates(value as Record<string, unknown>)),
     },
     async execute(args) {
-      return { peers: deps.manager.connect(deviceArg(args)) };
+      return lossless({ peers: deps.manager.connect(deviceArg(args)) });
     },
   };
 }
@@ -619,7 +639,7 @@ export function meshDisconnectTool(deps: ToolDependencies): ToolDefinition {
       render: (_args, value) => text(renderPeerStates(value as Record<string, unknown>)),
     },
     async execute(args) {
-      return { peers: deps.manager.disconnect(deviceArg(args)) };
+      return lossless({ peers: deps.manager.disconnect(deviceArg(args)) });
     },
   };
 }
@@ -664,13 +684,13 @@ export function meshConfigureTool(deps: ToolDependencies): ToolDefinition {
       const autoConnect = args["autoConnect"] !== false && nested["autoConnect"] !== false;
       if (url === "") throw new Error("BAD_PARAMS: mesh_configure needs a url (ws:// or wss://)");
       const status = deps.manager.configurePeer({ alias: alias === "" ? url : alias, url, autoConnect });
-      return {
+      return lossless({
         peer: status,
         durable: {
           peers: [{ alias: status.alias, url, autoConnect }],
           note: "Add this to the `peers` list under the dsh-mesh config in the profile cordis.patch.yml to keep it after a restart.",
         },
-      };
+      });
     },
   };
 }
