@@ -170,7 +170,7 @@ mkdir -p /storage/emulated/0/Download/dsh-mesh-workspace
 
 ## 3. 配对（人工一次）
 
-配对是双向确认，需要两个人眼可见的信息：**两边的 device id** 和**一行配对字符串**。
+配对是双向确认：**两边各自的 device id**、一份**含密钥的 JSON**，以及一个 6 字符的**核对码**。
 
 ### 3.1 手机先拿自己的 device id
 
@@ -182,9 +182,15 @@ mkdir -p /storage/emulated/0/Download/dsh-mesh-workspace
 
 输出第一行里 `` `xxxxxx-xxxxxx-xxxxxx-xxxxxx` `` 就是手机的 device id。**整个复制下来**。
 
-### 3.2 PC 生成配对字符串
+### 3.2 PC 生成配对
 
-PC DSH 里：
+PC 有两种方式，效果相同：
+
+**方式一：设置页（推荐，能一键复制）**
+
+设置 → 远程连接 → 「配对」那一栏，把手机的 device id 填进去，点「生成配对」。下方会出现一条配对，点它的**复制配置**按钮，得到一段 JSON。
+
+**方式二：对话里让 agent 做**
 
 ```text
 mesh_pair action=create device="<手机的 device id>"
@@ -193,27 +199,54 @@ mesh_pair action=create device="<手机的 device id>"
 输出会是这样（示例，你的值不同）：
 
 ```
-pairing code XXXXX-YYYYY for <手机 id>
+pairing code ZT9-HLQ  (compare this with the other device; it must match)
 
-Give this line to the other device (mesh_pair action=accept):
-<PC-device-id>|XXXXX-YYYYY|<base64 secret>
+Send this JSON to the other device. Its agent calls mesh_pair action=accept with it:
 
-Paste the pairingString into `mesh_pair` on the other device (action: accept), ...
+{
+  "kind": "dsh-mesh.pairing",
+  "version": 1,
+  "deviceId": "<PC-device-id>",
+  "name": "PC",
+  "peer": "<手机-device-id>",
+  "code": "ZT9-HLQ",
+  "secret": "<base64>",
+  "createdAt": 1234567890,
+  "acceptWith": "mesh_pair action=\"accept\" pairingString=\"<this JSON as a single line>\"",
+  "note": "Give this JSON to the other device. ..."
+}
 ```
 
-**把中间那一整行**（`PC 的 id | code | secret`）复制出来，通过手机能看到的方式发过去（微信传文件、直接手输、扫码都行）。这一行包含密钥，别发到公开的地方。
+**把整段 JSON 发给手机**（微信、QQ、AirDrop 都行）。它含密钥，别发到公开的地方。
+
+> 这 6 个字符（`ZT9-HLQ`）是**核对码**，不是密钥。它的用途是：两边都拿到之后，念一遍确认是同一份配对。密钥在 `secret` 字段里——短码单独拿出来是配不了对的。
 
 ### 3.3 手机接受配对
 
-手机 DSH 里：
+手机 DSH 里，把那段 JSON 原样贴进去：
 
 ```text
-mesh_pair action="accept" pairingString="<PC-device-id>|XXXXX-YYYYY|<base64 secret>" alias="pc"
+mesh_pair action="accept" pairingString="<刚才那整段 JSON>" alias="pc"
 ```
+
+JSON 里已经写好了 `acceptWith`，所以手机上更省事的做法是直接把 JSON 粘到对话里，说「用这个配对」，agent 会自己调。
 
 两边都成功的话，手机 `mesh_pair action="list"` 会显示一条 pairing，PC 侧的 `mesh_status` 的 `Pairings:` 里会出现你的手机 id。
 
-> 顺序不能反：`create` 需要知道对方的 device id，所以必须**手机先出自己的 id**，PC 再造配对字符串。
+> 顺序不能反：`create` 需要知道对方的 device id，所以必须**手机先出自己的 id**，PC 再生成配对。老版本的 `deviceId|code|secret` 单行格式仍然能接受，所以已经配对过的设备不用重做。
+
+### 3.4 补配数据（手机端是否需要额外配置）
+
+配对只装密钥，路由信息要另外配。手机侧还需要一条 `peers` 配置指向 PC（见第 2 节），PC 侧一般不需要。如果手机端没有 Web 设置页，把下面这段直接给手机上的 agent，让它写进配置：
+
+```yaml
+peers:
+  - alias: pc
+    url: wss://<隧道域名>:<端口>/dsh-mesh
+    autoConnect: true
+```
+
+JSON 里的 `deviceId` 就是 PC 的 id，`peer` 是手机的 id——两个值都可以用来核对方向有没有弄反。
 
 ---
 
