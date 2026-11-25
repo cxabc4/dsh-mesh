@@ -75,8 +75,7 @@ export interface PairingJson {
   createdAt: number;
   /** The tool call the receiving agent makes. */
   acceptWith: string;
-  /** The tool call that installs the peer route, once the pairing is accepted. */
-  configureWith?: string;
+
   /**
    * The `peers` entry the receiving device needs, when the minting side knows its own
    * public address. Empty when it does not — a plugin listening on loopback cannot see the
@@ -455,7 +454,7 @@ export class MeshManager {
       secret: material.secret.toString("base64"),
       createdAt: material.createdAt,
       acceptWith: `mesh_pair action="accept" pairingString="<this JSON as a single line>"`,
-      ...(peerConfig === undefined ? {} : { configureWith: `mesh_configure config=<the peerConfig object above>` }),
+
       ...(peerConfig === undefined ? {} : { peerConfig }),
       note:
         "Give this JSON to the other device. One paste installs the pairing, and when peerConfig is present the route too.",

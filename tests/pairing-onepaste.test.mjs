@@ -72,7 +72,7 @@ test("without an advertised address the payload still pairs and stays inbound-on
   try {
     const offer = handle.a.createPairingJson(handle.b.deviceId);
     assert.equal(offer.json.peerConfig, undefined);
-    assert.equal(offer.json.configureWith, undefined, "no route means nothing to configure");
+    assert.equal(offer.json.peerConfig, undefined, "no route is advertised");
     const accepted = handle.b.acceptPairingPayload(JSON.stringify(offer.json));
     assert.equal(accepted.peer, undefined);
     const peers = handle.b.snapshot().peers;
